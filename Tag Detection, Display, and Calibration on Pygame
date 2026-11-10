@@ -1,0 +1,163 @@
+import pygame as py
+
+from pupil_apriltags import Detector as D
+import cv2
+import numpy as np
+import os 
+import tkinter as tk
+
+# april tag setup
+Tag = D(families="tag36h11")
+# length of tag in Meters
+tag_length = 0.1778 
+# calibration distance (length of my laptop in meters)
+cal_dis = .225
+cal_txt = 'Press c when tag within 1 ft'
+
+camera = cv2.VideoCapture(0)
+camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+camera.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
+camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
+camera.set(cv2.CAP_PROP_FPS, 30)
+
+
+# set size
+cam_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+cam_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+
+
+# initialize
+
+py.init()
+
+# make screen
+screen  = py.display.set_mode( (cam_w,cam_h) )
+
+# for time-based things
+
+clock = py.time.Clock()
+
+# set a font 
+font_size = py.font.SysFont("Arial", 14)
+
+# title #
+py.display.set_caption("Pong?")
+
+# init running vars
+running = True
+Calibrated = False
+
+while running:
+
+    c_pressed = False
+    for event in py.event.get():
+
+        # quit pygame screen if q is pressed or X button
+        if event.type == py.QUIT or ( event.type == py.KEYDOWN and event.key == py.K_q) :
+            running = False
+        if event.type == py.KEYDOWN and event.key == py.K_c:
+            c_pressed = True
+        
+
+    # What key is being pressed (for 1 ms)
+    key = cv2.waitKey(1) & 0xFF
+
+    working , frame = camera.read()
+
+    # change cam dimensions
+    frame = cv2.resize(frame, (cam_w, cam_h))
+
+    # NOTE: this changes BGR to RGB, make sure to update that for all future ones
+    frame= cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    #%% now start with OpenCV stuff 
+
+    # changes color of specific frame from rgb 2 gray for contrast
+    gray = cv2.cvtColor(frame,cv2.COLOR_RGB2GRAY)
+    
+    # list of detected april tags
+    detections = Tag.detect(gray)
+
+                
+    #Calibration Process
+    # once camera is on we can find the pixel size of it
+    if Calibrated == False:
+                # press c when ready to calibrate & inclued prompt
+        cv2.putText(frame,
+                # text
+                'Press "c" when tag within 1 ft',
+                # pos
+                (20, 50),
+                # font
+                cv2.FONT_HERSHEY_SIMPLEX,
+                # size
+                2,
+                # now RGB color
+                color = (255, 0, 1),
+                # thickness
+                thickness= 2)
+        if c_pressed:
+
+            if detections:
+                
+                h, w = frame.shape[:2]
+                cx = w/2
+                cy = h/2
+                cal_tag = detections[0]
+                
+                # camera parameters to determine focal distance
+                corners = cal_tag.corners
+                # top right - top left distance of marker
+                top_w = np.linalg.norm(corners[1]-corners[0])
+                bottom_w = np.linalg.norm(corners[2]-corners[3])
+                avg_w = (top_w + bottom_w) / 2
+
+                # focal length
+                fx = avg_w*cal_dis/tag_length
+                fy = fx  
+
+                mycam_para = (fx,fy, cx, cy)
+                Calibrated = True
+            else:
+                print('No tag detected for calibration')
+
+    if Calibrated:
+        # Get the center coordinates
+        detections = Tag.detect(
+            gray,
+            estimate_tag_pose=True,
+            camera_params=mycam_para,
+            tag_size=tag_length
+                )
+    
+    # list of coords for all tags 
+    l_coords = []
+
+    for tag in detections:
+
+        # Convert corner coordinates to integers
+        # & Draw the four sides of the tag
+        corners = tag.corners.astype(int)
+
+        for i in range(4):
+            p1 = tuple(corners[i])
+            p2 = tuple(corners[(i + 1) % 4])
+            # make line from each corner on a frame with a certain bgr and thickness
+            Color_Bank = [(255, 0, 100),(100, 0, 255)]
+            Hi_Pryor = detections.index(tag) // 1
+            cv2.line(frame, p1, p2,Color_Bank[Hi_Pryor] , 3)
+
+    # NOTE: make sure to add all text and shapes before turning to surface, as only surface is displayed
+    # format numpy array of image into one that pygames can read
+    pyframe = py.surfarray.make_surface( np.transpose( frame, (1,0,2) ) )
+
+    # creates surface of CV2 image onto screen at pos 0 , 0
+    screen.blit(pyframe, (0, 0))
+
+
+    # updates screen
+    py.display.flip()
+
+
+py.quit()
