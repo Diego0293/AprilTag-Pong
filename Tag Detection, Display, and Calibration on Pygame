@@ -148,6 +148,39 @@ while running:
             Hi_Pryor = detections.index(tag) // 1
             cv2.line(frame, p1, p2,Color_Bank[Hi_Pryor] , 3)
 
+        if Calibrated:
+
+                # NOTE: NOTE: Will probably need center position to make colision in Pygame
+                center = tuple(tag.center.astype(int))
+    
+                # Pose estimation of each (position from center to cam center) by making it into a 1d array (x,y,z) in meters
+                x, y, z = tag.pose_t.flatten()
+                # x is left/right, y is up down, and z is away and towards
+                l_coords.append(tag.pose_t.flatten())
+
+                # offset and spacing
+                b = (30*4)
+                # m = int(25 * 10)
+
+                # Write position in center of tag
+                person_txt = f"Player {tag.tag_id}"
+                cv2.putText(
+                    # on what v v
+                    frame,
+                    # people detection
+                    person_txt,
+                    # where
+                    ( int(center[0] - b/2), center[1]+b),
+                    # font
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    # size
+                    1,
+                    # rgb color
+                    (255, 1, 255),
+                    # thickness
+                    2
+                )
+
     # NOTE: make sure to add all text and shapes before turning to surface, as only surface is displayed
     # format numpy array of image into one that pygames can read
     pyframe = py.surfarray.make_surface( np.transpose( frame, (1,0,2) ) )
@@ -161,3 +194,4 @@ while running:
 
 
 py.quit()
+
